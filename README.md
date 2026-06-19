@@ -68,3 +68,7 @@ POST /scrape
 - **Incremental scraping** — `last_seen_at` tracks re-visits; content updates in place
 - **Playwright support** — `use_playwright: true` for JS-heavy sites
 - **One-command deploy** — `docker-compose up --build`
+
+## License
+
+This project is licensed under the GPL License - see the [LICENSE](LICENSE) file for details.
