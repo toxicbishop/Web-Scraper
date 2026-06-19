@@ -24,6 +24,27 @@ services:
       - DATABASE_URL=postgresql://scraper:scraper@postgres:5432/scraperdb
       - REDIS_URL=redis://redis:6379/0
       - SECRET_KEY=changeme
+      - AWS_ACCESS_KEY_ID=${AWS_ACCESS_KEY_ID}
+      - AWS_SECRET_ACCESS_KEY=${AWS_SECRET_ACCESS_KEY}
+      - AWS_S3_BUCKET=${AWS_S3_BUCKET}
+      - AWS_DEFAULT_REGION=${AWS_DEFAULT_REGION}
+    depends_on:
+      - postgres
+      - redis
+    volumes:
+      - .:/app
+
+  beat:
+    build: .
+    command: celery -A workers.tasks beat --loglevel=info
+    environment:
+      - DATABASE_URL=postgresql://scraper:scraper@postgres:5432/scraperdb
+      - REDIS_URL=redis://redis:6379/0
+      - SECRET_KEY=changeme
+      - AWS_ACCESS_KEY_ID=${AWS_ACCESS_KEY_ID}
+      - AWS_SECRET_ACCESS_KEY=${AWS_SECRET_ACCESS_KEY}
+      - AWS_S3_BUCKET=${AWS_S3_BUCKET}
+      - AWS_DEFAULT_REGION=${AWS_DEFAULT_REGION}
     depends_on:
       - postgres
       - redis
@@ -39,6 +60,10 @@ services:
       - DATABASE_URL=postgresql://scraper:scraper@postgres:5432/scraperdb
       - REDIS_URL=redis://redis:6379/0
       - SECRET_KEY=changeme
+      - AWS_ACCESS_KEY_ID=${AWS_ACCESS_KEY_ID}
+      - AWS_SECRET_ACCESS_KEY=${AWS_SECRET_ACCESS_KEY}
+      - AWS_S3_BUCKET=${AWS_S3_BUCKET}
+      - AWS_DEFAULT_REGION=${AWS_DEFAULT_REGION}
     depends_on:
       - postgres
       - redis
