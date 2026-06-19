@@ -1,5 +1,5 @@
 from datetime import datetime, timezone
-from sqlalchemy import Column, Integer, String, Text, DateTime, create_engine
+from sqlalchemy import Column, Integer, String, Text, DateTime, Boolean, create_engine
 from sqlalchemy.orm import DeclarativeBase, sessionmaker
 import os
 
@@ -42,9 +42,19 @@ class ScrapeJob(Base):
     error = Column(Text, nullable=True)
 
 
+class PeriodicTarget(Base):
+    __tablename__ = "periodic_targets"
+
+    id = Column(Integer, primary_key=True, index=True)
+    url = Column(String, unique=True, nullable=False)
+    interval_minutes = Column(Integer, default=60)
+    last_scraped_at = Column(DateTime, nullable=True)
+    enabled = Column(Boolean, default=True)
+
 
 def init_db():
     Base.metadata.create_all(bind=engine)
+
 
 
 def get_db():
