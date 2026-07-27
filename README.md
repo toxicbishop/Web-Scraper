@@ -18,6 +18,7 @@ A production-grade web scraper with a FastAPI REST API, Celery task queue, Redis
 
 | Layer | Tech |
 |---|---|
+| Frontend | Next.js 16 + TypeScript + Tailwind CSS v4 |
 | Scraping | Playwright + BeautifulSoup + lxml |
 | Queue | Celery + Redis |
 | Deduplication | Redis (SHA-256 content hash, 7-day TTL) |
@@ -27,12 +28,28 @@ A production-grade web scraper with a FastAPI REST API, Celery task queue, Redis
 
 ## Quick Start
 
+### Full Stack (Docker)
 ```bash
-cp .env.example .env
+cp server/.env.example server/.env
 docker-compose up --build
 ```
 
-API will be live at `http://localhost:8000`. Docs at `http://localhost:8000/docs`.
+| Service | URL |
+|---|---|
+| API | http://localhost:8000 |
+| API Docs (Swagger) | http://localhost:8000/docs |
+| Frontend | http://localhost:3000 |
+
+### Run Locally (without Docker)
+```bash
+# Backend
+cd server
+python -m uvicorn api.main:app --reload
+
+# Frontend (separate terminal)
+pnpm install
+pnpm dev
+```
 
 ## API Endpoints
 
