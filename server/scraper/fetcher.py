@@ -8,11 +8,7 @@ RATE_LIMIT_DELAY = float(os.getenv("RATE_LIMIT_DELAY", "1.5"))
 
 
 def fetch_page(url: str) -> dict:
-    """
-    Fetch a URL using Playwright (handles JS-rendered pages).
-    Returns: { url, title, content, content_hash }
-    """
-    time.sleep(RATE_LIMIT_DELAY)  # polite rate limiting
+    time.sleep(RATE_LIMIT_DELAY)
 
     with sync_playwright() as p:
         browser = p.chromium.launch(headless=True)
@@ -31,9 +27,6 @@ def fetch_page(url: str) -> dict:
 
 
 def fetch_page_static(url: str) -> dict:
-    """
-    Fetch a static HTML page using requests (faster, no JS support).
-    """
     import requests
 
     time.sleep(RATE_LIMIT_DELAY)
@@ -46,26 +39,19 @@ def fetch_page_static(url: str) -> dict:
 
 
 def parse_html(url: str, html: str) -> dict:
-    """
-    Parse HTML with BeautifulSoup and extract key fields.
-    Returns structured dict ready for DB insert.
-    """
     soup = BeautifulSoup(html, "lxml")
 
     title = soup.title.get_text(strip=True) if soup.title else ""
 
-    # Remove scripts/styles before extracting text
     for tag in soup(["script", "style", "nav", "footer"]):
         tag.decompose()
 
     content = soup.get_text(separator=" ", strip=True)
-
-    # Deduplification hash based on content
     content_hash = hashlib.sha256(content.encode()).hexdigest()
 
     return {
         "url": url,
         "title": title,
-        "content": content[:50000],  # cap at 50k chars
+        "content": content[:50000],
         "content_hash": content_hash,
     }
