@@ -16,8 +16,7 @@ export default function AuthPage() {
     setBusy(true);
     setError("");
     try {
-      const t = await login(username, password);
-      setToken(t);
+      setToken(await login(username, password));
       router.push("/dashboard");
     } catch (e: any) {
       setError(e?.response?.data?.detail || "Login failed.");
@@ -28,42 +27,44 @@ export default function AuthPage() {
 
   return (
     <div className="p-8 max-w-sm">
-      <h1 className="text-xl font-semibold text-white mb-6">Auth</h1>
+      <h1 className="mono text-lg mb-1" style={{ color: "var(--text-primary)" }}>auth</h1>
+      <p className="text-sm mb-6" style={{ color: "var(--text-secondary)" }}>Sign in to access the API.</p>
 
-      <div className="bg-zinc-900 rounded-lg p-5">
-        <label className="text-xs text-zinc-500 mb-1.5 block">Username</label>
+      <div className="border rounded-md p-5" style={{ borderColor: "var(--border)", background: "var(--panel)" }}>
+        <label className="mono text-[11px] uppercase tracking-wider block mb-1.5" style={{ color: "var(--text-muted)" }}>username</label>
         <input
           type="text"
           value={username}
           onChange={(e) => setUsername(e.target.value)}
-          className="w-full bg-zinc-950 border border-zinc-800 rounded-md px-3 py-2 text-sm text-white mb-3 focus:outline-none focus:border-zinc-600"
+          className="mono w-full rounded-md px-3 py-2 text-sm mb-3 focus:outline-none"
+          style={{ background: "var(--bg)", border: "1px solid var(--border-strong)", color: "var(--text-primary)" }}
         />
 
-        <label className="text-xs text-zinc-500 mb-1.5 block">Password</label>
+        <label className="mono text-[11px] uppercase tracking-wider block mb-1.5" style={{ color: "var(--text-muted)" }}>password</label>
         <input
           type="password"
           value={password}
           onChange={(e) => setPassword(e.target.value)}
-          className="w-full bg-zinc-950 border border-zinc-800 rounded-md px-3 py-2 text-sm text-white mb-4 focus:outline-none focus:border-zinc-600"
+          className="mono w-full rounded-md px-3 py-2 text-sm mb-4 focus:outline-none"
+          style={{ background: "var(--bg)", border: "1px solid var(--border-strong)", color: "var(--text-primary)" }}
         />
 
-        {error && <p className="text-sm text-red-400 mb-3">{error}</p>}
+        {error && <p className="mono text-[12px] mb-3" style={{ color: "var(--danger)" }}>{error}</p>}
 
         <button
           onClick={handleLogin}
           disabled={busy}
-          className="w-full bg-white text-zinc-950 text-sm font-medium px-4 py-2 rounded-md hover:bg-zinc-200 transition-colors disabled:opacity-50"
+          className="mono w-full text-[13px] px-4 py-2 rounded-md disabled:opacity-40"
+          style={{ background: "var(--accent)", color: "#1a1305" }}
         >
-          {busy ? "Signing in…" : "Sign in"}
+          {busy ? "signing in…" : "sign in →"}
         </button>
 
-        {token && (
-          <p className="text-xs text-emerald-400 mt-3">Currently signed in.</p>
-        )}
+        {token && <p className="mono text-[11px] mt-3" style={{ color: "var(--success)" }}>currently signed in</p>}
       </div>
 
-      <p className="text-xs text-zinc-600 mt-4">
-        Default demo credentials: <code className="text-zinc-500">admin / admin</code>
+      <p className="mono text-[11px] mt-4" style={{ color: "var(--text-muted)" }}>
+        demo credentials: admin / admin
       </p>
     </div>
   );

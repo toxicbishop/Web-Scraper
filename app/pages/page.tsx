@@ -12,22 +12,19 @@ export default function PagesPage() {
 
   async function load() {
     setLoading(true);
-    try {
-      setPages(await listPages(0, 100));
-    } catch { /* ignore */ }
+    try { setPages(await listPages(0, 100)); }
+    catch { /* ignore */ }
     finally { setLoading(false); }
   }
 
-  useEffect(() => {
-    if (token) load();
-  }, [token]);
+  useEffect(() => { if (token) load(); }, [token]);
 
   if (!token) {
     return (
       <div className="p-8 max-w-3xl">
-        <h1 className="text-xl font-semibold text-white mb-4">Pages</h1>
-        <div className="text-sm text-zinc-500 bg-zinc-900 rounded-lg p-6 text-center">
-          Sign in from the <Link href="/auth" className="text-blue-400 hover:text-blue-300">Auth</Link> page first.
+        <h1 className="mono text-lg mb-6" style={{ color: "var(--text-primary)" }}>pages</h1>
+        <div className="border rounded-md p-6 text-center text-sm" style={{ borderColor: "var(--border)", background: "var(--panel)", color: "var(--text-secondary)" }}>
+          Sign in from <Link href="/auth" className="mono" style={{ color: "var(--info)" }}>/auth</Link> first.
         </div>
       </div>
     );
@@ -36,26 +33,25 @@ export default function PagesPage() {
   return (
     <div className="p-8 max-w-3xl">
       <div className="flex items-center justify-between mb-6">
-        <h1 className="text-xl font-semibold text-white">Pages</h1>
+        <h1 className="mono text-lg" style={{ color: "var(--text-primary)" }}>pages</h1>
         <button
           onClick={load}
           disabled={loading}
-          className="text-xs text-zinc-400 hover:text-white border border-zinc-800 rounded-md px-3 py-1.5 disabled:opacity-50"
+          className="mono text-[11px] px-3 py-1.5 rounded-md disabled:opacity-40"
+          style={{ border: "1px solid var(--border-strong)", color: "var(--text-secondary)" }}
         >
-          {loading ? "Loading…" : "Refresh ↻"}
+          {loading ? "loading…" : "refresh →"}
         </button>
       </div>
 
       {!loading && pages.length === 0 && (
-        <div className="text-sm text-zinc-500 bg-zinc-900 rounded-lg p-6 text-center">
+        <div className="border rounded-md p-6 text-center text-sm" style={{ borderColor: "var(--border)", background: "var(--panel)", color: "var(--text-secondary)" }}>
           No pages scraped yet.
         </div>
       )}
 
       <div className="flex flex-col gap-2">
-        {pages.map((p) => (
-          <PageRow key={p.id} {...p} />
-        ))}
+        {pages.map((p) => <PageRow key={p.id} {...p} />)}
       </div>
     </div>
   );

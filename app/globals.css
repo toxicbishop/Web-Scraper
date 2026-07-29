@@ -1,1 +1,39 @@
 @import "tailwindcss";
+
+:root {
+  --bg: #0a0d12;
+  --panel: #10141b;
+  --panel-2: #151a22;
+  --border: #1d2430;
+  --border-strong: #2a3341;
+  --text-primary: #e7eaef;
+  --text-secondary: #8993a4;
+  --text-muted: #5b6472;
+  --accent: #ffb454;
+  --accent-dim: #4a3a1e;
+  --info: #5ec8d8;
+  --info-dim: #1c3338;
+  --success: #4ade80;
+  --success-dim: #16321f;
+  --danger: #f87171;
+  --danger-dim: #3a1c1c;
+}
+
+html, body {
+  height: 100%;
+  background: var(--bg);
+}
+
+* {
+  scrollbar-width: thin;
+  scrollbar-color: var(--border-strong) transparent;
+}
+
+.mono {
+  font-family: var(--font-mono), ui-monospace, monospace;
+}
+
+.trace-line {
+  background-image: linear-gradient(to bottom, var(--border-strong) 1px, transparent 1px);
+  background-size: 1px 6px;
+}

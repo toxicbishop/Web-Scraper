@@ -3,11 +3,11 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useAuthStore } from "@/lib/store";
 
-const nav = [
-  { href: "/dashboard", label: "Dashboard",  icon: "▦" },
-  { href: "/scrape",    label: "Scrape",     icon: "▶" },
-  { href: "/pages",     label: "Pages",      icon: "☰" },
-  { href: "/auth",      label: "Auth",       icon: "⚿" },
+const routes = [
+  { href: "/dashboard", label: "dashboard" },
+  { href: "/scrape",    label: "scrape" },
+  { href: "/pages",     label: "pages" },
+  { href: "/auth",      label: "auth" },
 ];
 
 export default function Sidebar() {
@@ -15,45 +15,64 @@ export default function Sidebar() {
   const { token, clearToken } = useAuthStore();
 
   return (
-    <aside className="w-52 bg-zinc-950 border-r border-zinc-800 flex flex-col min-h-screen">
-      <div className="px-5 py-5 flex items-center gap-2 border-b border-zinc-800">
-        <span className="text-lg">🕷</span>
-        <span className="text-sm font-semibold text-white tracking-tight">Web Scraper</span>
+    <aside
+      className="w-64 flex flex-col min-h-screen border-r"
+      style={{ background: "var(--panel)", borderColor: "var(--border)" }}
+    >
+      <div className="px-5 py-5 border-b" style={{ borderColor: "var(--border)" }}>
+        <p className="mono text-[13px] tracking-tight" style={{ color: "var(--text-primary)" }}>
+          web-scraper
+        </p>
+        <p className="mono text-[11px] mt-0.5" style={{ color: "var(--text-muted)" }}>
+          crawl console
+        </p>
       </div>
 
-      <nav className="flex-1 py-3 flex flex-col gap-0.5 px-2">
-        {nav.map(({ href, label, icon }) => {
-          const active = pathname.startsWith(href);
-          return (
-            <Link
-              key={href}
-              href={href}
-              className={`flex items-center gap-3 px-3 py-2 rounded-md text-sm transition-colors ${
-                active
-                  ? "bg-zinc-800 text-white font-medium"
-                  : "text-zinc-400 hover:text-white hover:bg-zinc-900"
-              }`}
-            >
-              <span className="text-base leading-none">{icon}</span>
-              {label}
-            </Link>
-          );
-        })}
+      <nav className="flex-1 py-6 px-5">
+        <div className="relative">
+          <div className="absolute left-[5px] top-1 bottom-1 trace-line w-px" />
+          {routes.map(({ href, label }) => {
+            const active = pathname.startsWith(href);
+            return (
+              <Link key={href} href={href} className="group relative flex items-start gap-3 py-2.5">
+                <span
+                  className="relative z-10 mt-1.5 w-[11px] h-[11px] flex-shrink-0 border rounded-[2px] transition-colors"
+                  style={{
+                    background: active ? "var(--accent)" : "var(--panel)",
+                    borderColor: active ? "var(--accent)" : "var(--border-strong)",
+                  }}
+                />
+                <div>
+                  <p
+                    className="mono text-[13px] leading-none transition-colors"
+                    style={{ color: active ? "var(--text-primary)" : "var(--text-secondary)" }}
+                  >
+                    /{label}
+                  </p>
+                </div>
+              </Link>
+            );
+          })}
+        </div>
       </nav>
 
-      <div className="px-4 py-4 border-t border-zinc-800">
-        <div className={`text-xs px-2 py-1 rounded-full inline-flex items-center gap-1.5 mb-3 ${
-          token ? "bg-emerald-950 text-emerald-400" : "bg-red-950 text-red-400"
-        }`}>
-          <span className={`w-1.5 h-1.5 rounded-full ${token ? "bg-emerald-400" : "bg-red-400"}`} />
-          {token ? "Authenticated" : "No token"}
+      <div className="px-5 py-4 border-t" style={{ borderColor: "var(--border)" }}>
+        <div className="flex items-center gap-2 mb-3">
+          <span
+            className="w-1.5 h-1.5 rounded-full"
+            style={{ background: token ? "var(--success)" : "var(--danger)" }}
+          />
+          <p className="mono text-[11px]" style={{ color: "var(--text-secondary)" }}>
+            {token ? "authenticated" : "no token"}
+          </p>
         </div>
         {token && (
           <button
             onClick={clearToken}
-            className="text-xs text-zinc-500 hover:text-zinc-300 transition-colors block"
+            className="mono text-[11px] transition-colors"
+            style={{ color: "var(--text-muted)" }}
           >
-            Sign out
+            sign out →
           </button>
         )}
       </div>

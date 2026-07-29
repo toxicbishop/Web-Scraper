@@ -27,36 +27,41 @@ export default function PageRow({ id, url, title, scraped_at, content_preview }:
   }
 
   return (
-    <div className="border border-zinc-800 rounded-lg bg-zinc-900 overflow-hidden">
+    <div className="border rounded-md overflow-hidden" style={{ borderColor: "var(--border)", background: "var(--panel)" }}>
       <div
-        className="flex items-start gap-3 px-4 py-3 cursor-pointer hover:bg-zinc-800/50 transition-colors"
+        className="flex items-start gap-3 px-4 py-3 cursor-pointer transition-colors hover:brightness-110"
         onClick={loadFull}
       >
-        <div className="w-2 h-2 rounded-full bg-emerald-400 mt-1.5 flex-shrink-0" />
+        <span className="w-1.5 h-1.5 rounded-full mt-1.5 flex-shrink-0" style={{ background: "var(--success)" }} />
         <div className="flex-1 min-w-0">
-          <p className="text-sm font-medium text-white truncate">{title || "Untitled"}</p>
-          <p className="text-xs text-zinc-500 truncate">{url}</p>
+          <p className="text-sm font-medium truncate" style={{ color: "var(--text-primary)" }}>
+            {title || "untitled"}
+          </p>
+          <p className="mono text-[11px] truncate mt-0.5" style={{ color: "var(--text-muted)" }}>
+            {url}
+          </p>
         </div>
-        <div className="text-xs text-zinc-600 flex-shrink-0">
+        <span className="mono text-[11px] flex-shrink-0" style={{ color: "var(--text-muted)" }}>
           {new Date(scraped_at).toLocaleDateString()}
-        </div>
-        <span className="text-zinc-600 text-xs flex-shrink-0">
-          {loading ? "…" : expanded ? "▲" : "▼"}
+        </span>
+        <span className="mono text-[11px] flex-shrink-0" style={{ color: "var(--text-muted)" }}>
+          {loading ? "..." : expanded ? "−" : "+"}
         </span>
       </div>
 
       {expanded && (
-        <div className="border-t border-zinc-800 px-4 py-3">
-          <p className="text-xs text-zinc-400 leading-relaxed whitespace-pre-wrap line-clamp-6">
+        <div className="border-t px-4 py-3" style={{ borderColor: "var(--border)" }}>
+          <p className="text-[13px] leading-relaxed whitespace-pre-wrap line-clamp-6" style={{ color: "var(--text-secondary)" }}>
             {full || content_preview}
           </p>
           <a
             href={url}
             target="_blank"
             rel="noopener noreferrer"
-            className="text-xs text-blue-400 hover:text-blue-300 mt-2 inline-block"
+            className="mono text-[11px] mt-2 inline-block"
+            style={{ color: "var(--info)" }}
           >
-            Open original ↗
+            open source →
           </a>
         </div>
       )}

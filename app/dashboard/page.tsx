@@ -3,82 +3,81 @@ import { useEffect, useState } from "react";
 import { health, listPages } from "@/lib/api";
 import { useAuthStore } from "@/lib/store";
 import PageRow from "@/components/PageRow";
+import PipelineTrace from "@/components/PipelineTrace";
 import Link from "next/link";
 
 export default function Dashboard() {
   const { token } = useAuthStore();
-  const [status, setStatus] = useState<"online" | "offline" | "checking">("checking");
+  const [online, setOnline] = useState(false);
   const [pages, setPages] = useState<Awaited<ReturnType<typeof listPages>>>([]);
   const [loading, setLoading] = useState(false);
 
   useEffect(() => {
-    health().then(() => setStatus("online")).catch(() => setStatus("offline"));
+    health().then(() => setOnline(true)).catch(() => setOnline(false));
   }, []);
 
   useEffect(() => {
     if (!token) return;
     setLoading(true);
-    listPages(0, 5)
-      .then(setPages)
-      .catch(() => {})
-      .finally(() => setLoading(false));
+    listPages(0, 5).then(setPages).catch(() => {}).finally(() => setLoading(false));
   }, [token]);
 
   return (
     <div className="p-8 max-w-4xl">
-      <h1 className="text-xl font-semibold text-white mb-6">Dashboard</h1>
-
-      <div className="grid grid-cols-3 gap-3 mb-8">
-        <div className="bg-zinc-900 rounded-lg p-4">
-          <p className="text-xs text-zinc-500 uppercase tracking-wide mb-1">Pages scraped</p>
-          <p className="text-2xl font-semibold text-white">{token ? pages.length : "—"}</p>
-        </div>
-        <div className="bg-zinc-900 rounded-lg p-4">
-          <p className="text-xs text-zinc-500 uppercase tracking-wide mb-1">API status</p>
-          <p className={`text-sm font-medium mt-2 flex items-center gap-1.5 ${
-            status === "online" ? "text-emerald-400" : status === "offline" ? "text-red-400" : "text-zinc-500"
-          }`}>
-            <span className={`w-1.5 h-1.5 rounded-full ${
-              status === "online" ? "bg-emerald-400" : status === "offline" ? "bg-red-400" : "bg-zinc-600"
-            }`} />
-            {status === "checking" ? "Checking…" : status === "online" ? "Online" : "Offline"}
+      <div className="flex items-center justify-between mb-8">
+        <div>
+          <h1 className="mono text-lg" style={{ color: "var(--text-primary)" }}>dashboard</h1>
+          <p className="text-sm mt-1" style={{ color: "var(--text-secondary)" }}>
+            Pipeline status and recent crawl results.
           </p>
         </div>
-        <div className="bg-zinc-900 rounded-lg p-4">
-          <p className="text-xs text-zinc-500 uppercase tracking-wide mb-1">Auth</p>
-          <p className={`text-sm font-medium mt-2 ${token ? "text-emerald-400" : "text-red-400"}`}>
-            {token ? "Authenticated" : "Not signed in"}
-          </p>
-        </div>
+        <PipelineTrace online={online} />
       </div>
 
-      <div>
-        <div className="flex items-center justify-between mb-3">
-          <h2 className="text-sm font-medium text-zinc-400">Recent pages</h2>
-          <Link href="/pages" className="text-xs text-blue-400 hover:text-blue-300">View all →</Link>
-        </div>
-
-        {!token && (
-          <div className="text-sm text-zinc-500 bg-zinc-900 rounded-lg p-6 text-center">
-            Sign in from the <Link href="/auth" className="text-blue-400 hover:text-blue-300">Auth</Link> page to see data.
+      <div className="grid grid-cols-3 gap-3 mb-8">
+        {[
+          { label: "pages scraped", value: token ? String(pages.length) : "—" },
+          { label: "api", value: online ? "online" : "offline", color: online ? "var(--success)" : "var(--danger)" },
+          { label: "auth", value: token ? "authenticated" : "signed out", color: token ? "var(--success)" : "var(--text-muted)" },
+        ].map((m) => (
+          <div key={m.label} className="border rounded-md p-4" style={{ borderColor: "var(--border)", background: "var(--panel)" }}>
+            <p className="mono text-[11px] uppercase tracking-wider mb-1.5" style={{ color: "var(--text-muted)" }}>
+              {m.label}
+            </p>
+            <p className="mono text-lg" style={{ color: m.color ?? "var(--text-primary)" }}>
+              {m.value}
+            </p>
           </div>
-        )}
+        ))}
+      </div>
 
-        {token && loading && (
-          <div className="text-sm text-zinc-500 p-6 text-center">Loading…</div>
-        )}
+      <div className="flex items-center justify-between mb-3">
+        <p className="mono text-[11px] uppercase tracking-wider" style={{ color: "var(--text-muted)" }}>
+          recent pages
+        </p>
+        <Link href="/pages" className="mono text-[11px]" style={{ color: "var(--info)" }}>
+          view all →
+        </Link>
+      </div>
 
-        {token && !loading && pages.length === 0 && (
-          <div className="text-sm text-zinc-500 bg-zinc-900 rounded-lg p-6 text-center">
-            No pages scraped yet. Go to <Link href="/scrape" className="text-blue-400 hover:text-blue-300">Scrape</Link> to queue one.
-          </div>
-        )}
-
-        <div className="flex flex-col gap-2">
-          {pages.map((p) => (
-            <PageRow key={p.id} {...p} />
-          ))}
+      {!token && (
+        <div className="border rounded-md p-6 text-center text-sm" style={{ borderColor: "var(--border)", background: "var(--panel)", color: "var(--text-secondary)" }}>
+          Sign in from <Link href="/auth" className="mono" style={{ color: "var(--info)" }}>/auth</Link> to see data.
         </div>
+      )}
+
+      {token && loading && (
+        <p className="mono text-[13px] p-6 text-center" style={{ color: "var(--text-muted)" }}>loading…</p>
+      )}
+
+      {token && !loading && pages.length === 0 && (
+        <div className="border rounded-md p-6 text-center text-sm" style={{ borderColor: "var(--border)", background: "var(--panel)", color: "var(--text-secondary)" }}>
+          No pages scraped yet. Queue one from <Link href="/scrape" className="mono" style={{ color: "var(--info)" }}>/scrape</Link>.
+        </div>
+      )}
+
+      <div className="flex flex-col gap-2">
+        {pages.map((p) => <PageRow key={p.id} {...p} />)}
       </div>
     </div>
   );
