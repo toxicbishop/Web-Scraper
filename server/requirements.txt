@@ -20,7 +20,7 @@ pyopenssl==26.3.0
 playwright==1.61.0
 beautifulsoup4==4.13.3
 psycopg2-binary==2.9.12
-slowapi==0.1.9
+slowapi==0.1.10
 python-dotenv==1.2.2
 fastapi==0.121.0
 uvicorn==0.38.0
