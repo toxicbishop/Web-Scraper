@@ -22,5 +22,5 @@ beautifulsoup4==4.13.3
 psycopg2-binary==2.9.12
 slowapi==0.1.10
 python-dotenv==1.2.2
-fastapi==0.121.0
+fastapi==0.141.1
 uvicorn==0.38.0
