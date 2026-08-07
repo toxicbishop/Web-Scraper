@@ -4,7 +4,6 @@ const BASE = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
 
 export const api = axios.create({ baseURL: BASE });
 
-// Attach token to every request if present
 api.interceptors.request.use((config) => {
   if (typeof window !== "undefined") {
     const token = localStorage.getItem("scraper_token");
@@ -13,22 +12,30 @@ api.interceptors.request.use((config) => {
   return config;
 });
 
-// ── Auth ──────────────────────────────────────────────────────────────────────
 export async function login(username: string, password: string) {
   const { data } = await api.post("/token", { username, password });
   return data.access_token as string;
 }
 
-// ── Health ────────────────────────────────────────────────────────────────────
 export async function health() {
   const { data } = await api.get("/health");
   return data as { status: string };
 }
 
-// ── Scrape ────────────────────────────────────────────────────────────────────
-export async function triggerScrape(url: string, use_playwright = false) {
-  const { data } = await api.post("/scrape", { url, use_playwright });
-  return data as { job_id: number; task_id: string; status: string };
+export type ScrapeMode = "static" | "playwright" | "scroll" | "click_through";
+
+export interface ScrapeOptions {
+  mode?: ScrapeMode;
+  feed_selector?: string;
+  max_scrolls?: number;
+  item_selector?: string;
+  detail_wait_selector?: string;
+  max_items?: number;
+}
+
+export async function triggerScrape(url: string, options: ScrapeOptions = {}) {
+  const { data } = await api.post("/scrape", { url, mode: "static", ...options });
+  return data as { job_id: number; task_id: string; status: string; mode: string };
 }
 
 export async function getJobStatus(job_id: number) {
@@ -43,7 +50,6 @@ export async function getJobStatus(job_id: number) {
   };
 }
 
-// ── Pages ─────────────────────────────────────────────────────────────────────
 export async function listPages(skip = 0, limit = 50) {
   const { data } = await api.get("/data", { params: { skip, limit } });
   return data as {

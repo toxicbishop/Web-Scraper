@@ -1,24 +1,41 @@
 "use client";
 import { useState } from "react";
-import { triggerScrape, getJobStatus } from "@/lib/api";
+import { triggerScrape, getJobStatus, ScrapeMode } from "@/lib/api";
 import { useAuthStore } from "@/lib/store";
 import StatusBadge from "@/components/StatusBadge";
 import Link from "next/link";
 
+const modes: { value: ScrapeMode; label: string; hint: string }[] = [
+  { value: "static", label: "static", hint: "requests + BeautifulSoup, fastest, no JS" },
+  { value: "playwright", label: "playwright", hint: "JS-rendered page, stealth-aware" },
+  { value: "scroll", label: "scroll", hint: "infinite-scroll feed" },
+  { value: "click_through", label: "click_through", hint: "opens each list item for detail data" },
+];
+
 export default function ScrapePage() {
   const { token } = useAuthStore();
   const [url, setUrl] = useState("");
-  const [usePlaywright, setUsePlaywright] = useState(false);
+  const [mode, setMode] = useState<ScrapeMode>("static");
+  const [feedSelector, setFeedSelector] = useState("body");
+  const [itemSelector, setItemSelector] = useState("");
   const [job, setJob] = useState<Awaited<ReturnType<typeof getJobStatus>> | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
 
   async function handleScrape() {
     if (!url.trim()) return;
+    if (mode === "click_through" && !itemSelector.trim()) {
+      setError("item_selector is required for click_through mode");
+      return;
+    }
     setBusy(true);
     setError("");
     try {
-      const res = await triggerScrape(url.trim(), usePlaywright);
+      const res = await triggerScrape(url.trim(), {
+        mode,
+        feed_selector: feedSelector,
+        item_selector: itemSelector || undefined,
+      });
       setJob(await getJobStatus(res.job_id));
     } catch (e: any) {
       setError(e?.response?.data?.detail || "Failed to queue scrape.");
@@ -59,14 +76,63 @@ export default function ScrapePage() {
           value={url}
           onChange={(e) => setUrl(e.target.value)}
           placeholder="https://example.com"
-          className="mono w-full rounded-md px-3 py-2 text-sm mb-3 focus:outline-none"
+          className="mono w-full rounded-md px-3 py-2 text-sm mb-4 focus:outline-none"
           style={{ background: "var(--bg)", border: "1px solid var(--border-strong)", color: "var(--text-primary)" }}
         />
 
-        <label className="flex items-center gap-2 text-sm mb-4 cursor-pointer" style={{ color: "var(--text-secondary)" }}>
-          <input type="checkbox" checked={usePlaywright} onChange={(e) => setUsePlaywright(e.target.checked)} />
-          use playwright (js-rendered sites)
+        <label className="mono text-[11px] uppercase tracking-wider block mb-2" style={{ color: "var(--text-muted)" }}>
+          mode
         </label>
+        <div className="grid grid-cols-2 gap-2 mb-4">
+          {modes.map((m) => (
+            <button
+              key={m.value}
+              onClick={() => setMode(m.value)}
+              className="text-left rounded-md px-3 py-2 transition-colors"
+              style={{
+                border: `1px solid ${mode === m.value ? "var(--accent)" : "var(--border-strong)"}`,
+                background: mode === m.value ? "var(--accent-dim)" : "transparent",
+              }}
+            >
+              <p className="mono text-[12px]" style={{ color: mode === m.value ? "var(--accent)" : "var(--text-primary)" }}>
+                {m.label}
+              </p>
+              <p className="text-[11px] mt-0.5" style={{ color: "var(--text-muted)" }}>{m.hint}</p>
+            </button>
+          ))}
+        </div>
+
+        {mode === "scroll" && (
+          <div className="mb-4">
+            <label className="mono text-[11px] uppercase tracking-wider block mb-1.5" style={{ color: "var(--text-muted)" }}>
+              feed selector
+            </label>
+            <input
+              type="text"
+              value={feedSelector}
+              onChange={(e) => setFeedSelector(e.target.value)}
+              placeholder="body"
+              className="mono w-full rounded-md px-3 py-2 text-sm focus:outline-none"
+              style={{ background: "var(--bg)", border: "1px solid var(--border-strong)", color: "var(--text-primary)" }}
+            />
+          </div>
+        )}
+
+        {mode === "click_through" && (
+          <div className="mb-4">
+            <label className="mono text-[11px] uppercase tracking-wider block mb-1.5" style={{ color: "var(--text-muted)" }}>
+              item selector (required)
+            </label>
+            <input
+              type="text"
+              value={itemSelector}
+              onChange={(e) => setItemSelector(e.target.value)}
+              placeholder='a[href*="/item/"]'
+              className="mono w-full rounded-md px-3 py-2 text-sm focus:outline-none"
+              style={{ background: "var(--bg)", border: "1px solid var(--border-strong)", color: "var(--text-primary)" }}
+            />
+          </div>
+        )}
 
         {error && <p className="mono text-[12px] mb-3" style={{ color: "var(--danger)" }}>{error}</p>}
 

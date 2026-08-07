@@ -68,23 +68,46 @@ def require_auth(authorization: Optional[str] = Header(None)):
 
 class ScrapeRequest(BaseModel):
     url: str
-    use_playwright: bool = False
+    mode: str = "static"  # static | playwright | scroll | click_through
+
+    # scroll mode
+    feed_selector: str = "body"
+    max_scrolls: int = 10
+
+    # click_through mode
+    item_selector: Optional[str] = None
+    detail_wait_selector: str = "h1"
+    max_items: int = 10
 
 
 @app.post("/scrape", dependencies=[Depends(require_auth)])
 @limiter.limit("10/minute")
 def trigger_scrape(request: Request, body: ScrapeRequest, db: Session = Depends(get_db)):
+    if body.mode not in ("static", "playwright", "scroll", "click_through"):
+        raise HTTPException(status_code=400, detail="Invalid mode")
+    if body.mode == "click_through" and not body.item_selector:
+        raise HTTPException(status_code=400, detail="item_selector is required for click_through mode")
+
     job = ScrapeJob(url=body.url, status="queued")
     db.add(job)
     db.commit()
     db.refresh(job)
 
-    task = scrape_url.delay(body.url, job_id=job.id, use_playwright=body.use_playwright)
+    task = scrape_url.delay(
+        body.url,
+        job_id=job.id,
+        mode=body.mode,
+        feed_selector=body.feed_selector,
+        max_scrolls=body.max_scrolls,
+        item_selector=body.item_selector,
+        detail_wait_selector=body.detail_wait_selector,
+        max_items=body.max_items,
+    )
 
     job.celery_task_id = task.id
     db.commit()
 
-    return {"job_id": job.id, "task_id": task.id, "status": "queued"}
+    return {"job_id": job.id, "task_id": task.id, "status": "queued", "mode": body.mode}
 
 
 @app.get("/status/{job_id}", dependencies=[Depends(require_auth)])
