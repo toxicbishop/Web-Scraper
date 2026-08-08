@@ -4,3 +4,5 @@ allowBuilds:
 overrides:
   postcss: ">=8.5.10"
   sharp: ">=0.35.0"
+  nanoid: ">=6.0.1"
+  js-yaml: ">=5.2.3"
