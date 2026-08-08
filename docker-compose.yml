@@ -24,6 +24,23 @@ services:
       - DATABASE_URL=postgresql://scraper:scraper@postgres:5432/scraperdb
       - REDIS_URL=redis://redis:6379/0
       - SECRET_KEY=changeme
+      - AWS_ACCESS_KEY_ID=${AWS_ACCESS_KEY_ID:-}
+      - AWS_SECRET_ACCESS_KEY=${AWS_SECRET_ACCESS_KEY:-}
+      - AWS_REGION=${AWS_REGION:-us-east-1}
+      - S3_BUCKET=${S3_BUCKET:-}
+    depends_on:
+      - postgres
+      - redis
+    volumes:
+      - ./server:/app
+
+  beat:
+    build: ./server
+    command: celery -A workers.tasks beat -S redbeat.RedBeatScheduler --loglevel=info
+    environment:
+      - DATABASE_URL=postgresql://scraper:scraper@postgres:5432/scraperdb
+      - REDIS_URL=redis://redis:6379/0
+      - SECRET_KEY=changeme
     depends_on:
       - postgres
       - redis
@@ -40,6 +57,10 @@ services:
       - REDIS_URL=redis://redis:6379/0
       - SECRET_KEY=changeme
       - FRONTEND_ORIGIN=http://localhost:3000
+      - AWS_ACCESS_KEY_ID=${AWS_ACCESS_KEY_ID:-}
+      - AWS_SECRET_ACCESS_KEY=${AWS_SECRET_ACCESS_KEY:-}
+      - AWS_REGION=${AWS_REGION:-us-east-1}
+      - S3_BUCKET=${S3_BUCKET:-}
     depends_on:
       - postgres
       - redis
@@ -47,8 +68,8 @@ services:
       - ./server:/app
 
   frontend:
-    build: ./frontend
-    command: npm run dev
+    build: .
+    command: pnpm run dev
     ports:
       - "3000:3000"
     environment:
@@ -56,7 +77,7 @@ services:
     depends_on:
       - api
     volumes:
-      - ./frontend:/app
+      - .:/app
       - /app/node_modules
       - /app/.next
 
