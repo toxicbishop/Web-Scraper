@@ -1,6 +1,6 @@
 from celery.schedules import crontab
 from redbeat import RedBeatSchedulerEntry
-from workers.tasks import app, run_scheduled_scrape
+from workers.tasks import app
 
 
 def _entry_name(schedule_id: int) -> str:
