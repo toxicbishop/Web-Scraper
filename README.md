@@ -147,6 +147,9 @@ GET /health   returns: { "status": "ok" }
 
 ## Architecture
 
+![Web Scraper Architecture](public/Web-Scraper-Architecture.png)
+*System architecture overview illustrating API request flows, worker execution, deduplication, storage, and dynamic scheduling.*
+
 ```
 POST /scrape
     └── ScrapeJob created (PostgreSQL)
