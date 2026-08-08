@@ -207,4 +207,4 @@ POST /export/s3
 
 ## License
 
-MIT — see [LICENSE](LICENSE).
+This project is licensed under the [MIT License](LICENSE).
