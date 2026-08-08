@@ -73,3 +73,62 @@ export async function getPage(id: number) {
     last_seen_at: string;
   };
 }
+
+// ── Schedules ─────────────────────────────────────────────────────────────────
+
+export interface CreateScheduleOptions extends ScrapeOptions {
+  minute?: string;
+  hour?: string;
+  day_of_week?: string;
+  day_of_month?: string;
+  month_of_year?: string;
+}
+
+export interface Schedule {
+  id: number;
+  url: string;
+  mode: string;
+  cron: string;
+  enabled: boolean;
+  created_at: string;
+  last_triggered_at: string | null;
+}
+
+export async function createSchedule(url: string, options: CreateScheduleOptions = {}) {
+  const { data } = await api.post("/schedules", { url, mode: "static", ...options });
+  return data as { id: number; status: string };
+}
+
+export async function listSchedules() {
+  const { data } = await api.get("/schedules");
+  return data as Schedule[];
+}
+
+export async function toggleSchedule(id: number, enabled: boolean) {
+  const { data } = await api.patch(`/schedules/${id}`, null, { params: { enabled } });
+  return data as { id: number; enabled: boolean };
+}
+
+export async function deleteSchedule(id: number) {
+  const { data } = await api.delete(`/schedules/${id}`);
+  return data as { id: number; status: string };
+}
+
+// ── Export ────────────────────────────────────────────────────────────────────
+
+export async function downloadCsv() {
+  const response = await api.get("/export", { responseType: "blob" });
+  const url = window.URL.createObjectURL(new Blob([response.data]));
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = `scraped_pages_${Date.now()}.csv`;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  window.URL.revokeObjectURL(url);
+}
+
+export async function exportToS3(bucket?: string, key_prefix = "scraper-exports") {
+  const { data } = await api.post("/export/s3", { bucket, key_prefix });
+  return data as { bucket: string; key: string; url: string };
+}
