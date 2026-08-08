@@ -180,8 +180,8 @@ POST /export/s3
 - **Anti-detection layer** — `--disable-blink-features=AutomationControlled`, rotating User-Agent pool, randomised jitter between page actions, randomised viewport per session
 - **Data-quality gate** — results with no title and under 40 characters of content are rejected before dedup or storage; catches silent blocks, captcha redirects, and failed renders
 - **Deduplication** — SHA-256 hash checked in Redis before any Postgres write; 7-day TTL
-- **Dynamic scheduling** — celery-redbeat stores schedules in Redis; add, enable, disable, or delete without restarting the Beat process
-- **CSV and S3 export** — one endpoint streams a CSV directly; another uploads it to any S3-compatible bucket
+- **Dynamic scheduling** — celery-redbeat stores schedules in Redis; add, enable, disable, or delete without restarting the Beat process (fully manageable via the `/schedules` UI)
+- **CSV and S3 export** — one endpoint streams a CSV directly; another uploads it to any S3-compatible bucket (triggerable via the `/schedules` UI)
 - **Retry logic** — Celery retries failed tasks 3 times with a 10-second backoff
 - **JWT auth** — stateless token auth on all data and schedule endpoints
 - **Rate limiting** — per-domain configurable delay in the fetcher; slowapi on the API (10 req/min on `/scrape`, 30 req/min on `/data`)
