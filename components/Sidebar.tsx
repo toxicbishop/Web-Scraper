@@ -6,6 +6,7 @@ import { useAuthStore } from "@/lib/store";
 const routes = [
   { href: "/dashboard", label: "dashboard" },
   { href: "/scrape",    label: "scrape" },
+  { href: "/schedules", label: "schedules" },
   { href: "/pages",     label: "pages" },
   { href: "/auth",      label: "auth" },
 ];
