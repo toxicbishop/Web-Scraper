@@ -16,7 +16,7 @@ numpy==2.4.6
 pandas==3.0.5
 httpx==0.28.1
 aiohttp==3.14.3
-Markdown==3.10.2
+Markdown==3.10.3
 pyopenssl==26.3.0
 playwright==1.50.0
 beautifulsoup4==4.15.0
