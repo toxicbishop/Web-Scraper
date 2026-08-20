@@ -24,4 +24,4 @@ psycopg2-binary==2.9.10
 slowapi==0.1.9
 python-dotenv==1.2.2
 fastapi==0.121.0
-uvicorn==0.52.1
+uvicorn==0.52.3
