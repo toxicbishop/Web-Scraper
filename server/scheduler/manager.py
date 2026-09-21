@@ -13,22 +13,25 @@ def upsert_beat_entry(schedule) -> None:
     Called after any create/update so the running beat process picks up
     the change on its next tick — no restart needed.
     """
-    schedule_crontab = crontab(
-        minute=schedule.minute,
-        hour=schedule.hour,
-        day_of_week=schedule.day_of_week,
-        day_of_month=schedule.day_of_month,
-        month_of_year=schedule.month_of_year,
-    )
+    try:
+        schedule_crontab = crontab(
+            minute=schedule.minute,
+            hour=schedule.hour,
+            day_of_week=schedule.day_of_week,
+            day_of_month=schedule.day_of_month,
+            month_of_year=schedule.month_of_year,
+        )
 
-    entry = RedBeatSchedulerEntry(
-        name=_entry_name(schedule.id),
-        task="workers.tasks.run_scheduled_scrape",
-        schedule=schedule_crontab,
-        args=[schedule.id],
-        app=app,
-    )
-    entry.save()
+        entry = RedBeatSchedulerEntry(
+            name=_entry_name(schedule.id),
+            task="workers.tasks.run_scheduled_scrape",
+            schedule=schedule_crontab,
+            args=[schedule.id],
+            app=app,
+        )
+        entry.save()
+    except Exception as exc:
+        print(f"[scheduler] Warning: Redis beat entry could not be saved ({exc})")
 
 
 def remove_beat_entry(schedule_id: int) -> None:
@@ -38,5 +41,5 @@ def remove_beat_entry(schedule_id: int) -> None:
             f"{app.conf.redbeat_key_prefix}{_entry_name(schedule_id)}", app=app
         )
         entry.delete()
-    except KeyError:
-        pass  # already gone
+    except (KeyError, Exception) as exc:
+        pass  # already gone or redis offline

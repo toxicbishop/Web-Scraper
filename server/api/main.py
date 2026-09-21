@@ -1,6 +1,9 @@
 import os
 from datetime import datetime, timedelta
 from typing import Optional
+from dotenv import load_dotenv
+
+load_dotenv()
 
 import jwt
 from fastapi import FastAPI, Depends, HTTPException, Header
