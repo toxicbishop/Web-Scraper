@@ -43,22 +43,69 @@ docker-compose up --build
 
 ### Local (without Docker)
 
+#### Prerequisites: Install `make` (if not already installed)
+
+- **Windows**:
+  ```powershell
+  # Using Chocolatey
+  choco install make
+
+  # Or using winget
+  winget install GnuWin32.Make
+
+  # Or using Scoop
+  scoop install make
+  ```
+- **macOS**:
+  ```bash
+  brew install make
+  ```
+- **Linux (Ubuntu/Debian)**:
+  ```bash
+  sudo apt update && sudo apt install make
+  ```
+
+---
+
+#### Launch with `make` (One Command)
+
+From the project root:
+```bash
+make demo
+```
+This single command:
+1. Concurrently starts the **FastAPI backend** on `http://localhost:8000` (using SQLite and in-process scraping).
+2. Concurrently starts the **Next.js frontend** on `http://localhost:3000`.
+3. Displays unified, color-coded logs for both services in your terminal.
+
+Simply click or navigate to **`http://localhost:3000`** in your browser to view the application! Press `Ctrl + C` anytime to stop both services.
+
+#### Other `make` commands:
+```bash
+make backend   # Run only the FastAPI backend (http://localhost:8000)
+make frontend  # Run only the Next.js frontend (http://localhost:3000)
+make build     # Build the Next.js production bundle
+make help      # Show all available make commands
+```
+
+#### Or Run Individual Services Manually
 ```bash
 # Backend — terminal 1
 cd server
 python -m uvicorn api.main:app --reload
 
-# Celery worker — terminal 2
-cd server
-celery -A workers.tasks worker --loglevel=info
-
-# Celery Beat (scheduling) — terminal 3
-cd server
-celery -A workers.tasks beat -S redbeat.RedBeatScheduler --loglevel=info
-
-# Frontend — terminal 4
+# Frontend — terminal 2
 pnpm install
 pnpm dev
+
+# Optional: Celery worker (with Redis) — terminal 3
+# On Windows, use --pool=solo
+cd server
+celery -A workers.tasks worker --pool=solo --loglevel=info
+
+# Optional: Celery Beat (with Redis) — terminal 4
+cd server
+celery -A workers.tasks beat -S redbeat.RedBeatScheduler --loglevel=info
 ```
 
 ## API Reference
