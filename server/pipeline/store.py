@@ -1,6 +1,9 @@
 import redis
 import os
 from datetime import datetime
+from dotenv import load_dotenv
+
+load_dotenv()
 from models.db import SessionLocal, ScrapedPage
 
 REDIS_URL = os.getenv("REDIS_URL", "redis://localhost:6379/0")
@@ -11,13 +14,21 @@ DEDUP_TTL = 60 * 60 * 24 * 7
 
 MIN_CONTENT_CHARS = 40  # below this, treat as empty/garbage
 
+_memory_seen = set()
+
 
 def is_duplicate(content_hash: str) -> bool:
-    return r.exists(f"{DEDUP_KEY_PREFIX}{content_hash}") == 1
+    try:
+        return r.exists(f"{DEDUP_KEY_PREFIX}{content_hash}") == 1
+    except Exception:
+        return content_hash in _memory_seen
 
 
 def mark_seen(content_hash: str):
-    r.setex(f"{DEDUP_KEY_PREFIX}{content_hash}", DEDUP_TTL, "1")
+    try:
+        r.setex(f"{DEDUP_KEY_PREFIX}{content_hash}", DEDUP_TTL, "1")
+    except Exception:
+        _memory_seen.add(content_hash)
 
 
 def is_low_quality(data: dict) -> bool:

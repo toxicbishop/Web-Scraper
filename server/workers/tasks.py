@@ -1,9 +1,13 @@
 import os
 from celery import Celery
 from datetime import datetime
+from dotenv import load_dotenv
+
+load_dotenv()
 from models.db import SessionLocal, ScrapeJob, ScheduledScrape
 
 REDIS_URL = os.getenv("REDIS_URL", "redis://localhost:6379/0")
+CELERY_ALWAYS_EAGER = os.getenv("CELERY_ALWAYS_EAGER", "false").lower() in ("true", "1", "yes")
 
 app = Celery(
     "scraper",
@@ -12,6 +16,8 @@ app = Celery(
 )
 
 app.conf.update(
+    task_always_eager=CELERY_ALWAYS_EAGER,
+    task_eager_propagates=CELERY_ALWAYS_EAGER,
     task_serializer="json",
     result_serializer="json",
     accept_content=["json"],
