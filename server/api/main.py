@@ -1,7 +1,6 @@
 import os
-from datetime import datetime, timedelta, timezone
+from datetime import datetime, timedelta
 from typing import Optional
-from contextlib import asynccontextmanager
 
 import jwt
 from fastapi import FastAPI, Depends, HTTPException, Header
@@ -13,27 +12,32 @@ from slowapi.util import get_remote_address
 from slowapi.errors import RateLimitExceeded
 from starlette.requests import Request
 
-from models.db import init_db, get_db, ScrapedPage, ScrapeJob, PeriodicTarget
-from workers.tasks import scrape_url, export_to_s3_task
+from models.db import init_db, get_db, ScrapedPage, ScrapeJob, ScheduledScrape
+from workers.tasks import scrape_url
+from scheduler.manager import upsert_beat_entry, remove_beat_entry
+from pipeline.export import pages_to_csv, upload_csv_to_s3
 from sqlalchemy.orm import Session
 
 SECRET_KEY = os.getenv("SECRET_KEY", "changeme")
 ALGORITHM = "HS256"
+FRONTEND_ORIGIN = os.getenv("FRONTEND_ORIGIN", "http://localhost:3000")
 
 limiter = Limiter(key_func=get_remote_address)
-
-@asynccontextmanager
-async def lifespan(app: FastAPI):
-    init_db()
-    yield
-
-app = FastAPI(title="Portfolio Scraper API", version="1.0.0", lifespan=lifespan)
+app = FastAPI(title="Portfolio Scraper API", version="1.0.0")
 app.state.limiter = limiter
 app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
-app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_methods=["*"], allow_headers=["*"])
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=[FRONTEND_ORIGIN, "http://localhost:3000"],
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 
 
-# ── Auth ──────────────────────────────────────────────────────────────────────
+@app.on_event("startup")
+def startup():
+    init_db()
+
 
 class TokenRequest(BaseModel):
     username: str
@@ -42,17 +46,11 @@ class TokenRequest(BaseModel):
 
 @app.post("/token")
 def get_token(body: TokenRequest):
-    """Issue a JWT. In production, verify against a real user store."""
     if body.username != "admin" or body.password != "admin":
         raise HTTPException(status_code=401, detail="Invalid credentials")
-
-    payload = {
-        "sub": body.username,
-        "exp": datetime.now(timezone.utc) + timedelta(hours=24),
-    }
+    payload = {"sub": body.username, "exp": datetime.utcnow() + timedelta(hours=24)}
     token = jwt.encode(payload, SECRET_KEY, algorithm=ALGORITHM)
     return {"access_token": token, "token_type": "bearer"}
-
 
 
 def require_auth(authorization: Optional[str] = Header(None)):
@@ -67,176 +65,172 @@ def require_auth(authorization: Optional[str] = Header(None)):
         raise HTTPException(status_code=401, detail="Invalid token")
 
 
-# ── Scrape endpoints ──────────────────────────────────────────────────────────
-
 class ScrapeRequest(BaseModel):
     url: str
-    use_playwright: bool = False
+    mode: str = "static"
+    feed_selector: str = "body"
+    max_scrolls: int = 10
+    item_selector: Optional[str] = None
+    detail_wait_selector: str = "h1"
+    max_items: int = 10
 
 
 @app.post("/scrape", dependencies=[Depends(require_auth)])
 @limiter.limit("10/minute")
 def trigger_scrape(request: Request, body: ScrapeRequest, db: Session = Depends(get_db)):
-    """Queue a scrape job. Returns job ID for status polling."""
+    if body.mode not in ("static", "playwright", "scroll", "click_through"):
+        raise HTTPException(status_code=400, detail="Invalid mode")
+    if body.mode == "click_through" and not body.item_selector:
+        raise HTTPException(status_code=400, detail="item_selector is required for click_through mode")
+
     job = ScrapeJob(url=body.url, status="queued")
     db.add(job)
     db.commit()
     db.refresh(job)
 
-    task = scrape_url.delay(body.url, job_id=job.id, use_playwright=body.use_playwright)
-
+    task = scrape_url.delay(
+        body.url, job_id=job.id, mode=body.mode, feed_selector=body.feed_selector,
+        max_scrolls=body.max_scrolls, item_selector=body.item_selector,
+        detail_wait_selector=body.detail_wait_selector, max_items=body.max_items,
+    )
     job.celery_task_id = task.id
     db.commit()
 
-    return {"job_id": job.id, "task_id": task.id, "status": "queued"}
+    return {"job_id": job.id, "task_id": task.id, "status": "queued", "mode": body.mode}
 
 
 @app.get("/status/{job_id}", dependencies=[Depends(require_auth)])
 def job_status(job_id: int, db: Session = Depends(get_db)):
-    """Poll the status of a scrape job."""
     job = db.query(ScrapeJob).filter_by(id=job_id).first()
     if not job:
         raise HTTPException(status_code=404, detail="Job not found")
     return {
-        "job_id": job.id,
-        "url": job.url,
-        "status": job.status,
-        "created_at": job.created_at,
-        "finished_at": job.finished_at,
-        "error": job.error,
+        "job_id": job.id, "url": job.url, "status": job.status,
+        "created_at": job.created_at, "finished_at": job.finished_at, "error": job.error,
     }
 
 
 @app.get("/data", dependencies=[Depends(require_auth)])
 @limiter.limit("30/minute")
-def list_data(
-    request: Request,
-    skip: int = 0,
-    limit: int = 20,
-    db: Session = Depends(get_db),
-):
-    """List all successfully scraped pages."""
+def list_data(request: Request, skip: int = 0, limit: int = 20, db: Session = Depends(get_db)):
     pages = db.query(ScrapedPage).filter_by(status="done").offset(skip).limit(limit).all()
     return [
-        {
-            "id": p.id,
-            "url": p.url,
-            "title": p.title,
-            "scraped_at": p.scraped_at,
-            "content_preview": p.content[:300] if p.content else "",
-        }
+        {"id": p.id, "url": p.url, "title": p.title, "scraped_at": p.scraped_at,
+         "content_preview": p.content[:300] if p.content else ""}
         for p in pages
     ]
 
 
 @app.get("/data/{page_id}", dependencies=[Depends(require_auth)])
 def get_page(page_id: int, db: Session = Depends(get_db)):
-    """Fetch full content of a scraped page."""
     page = db.query(ScrapedPage).filter_by(id=page_id).first()
     if not page:
         raise HTTPException(status_code=404, detail="Page not found")
     return {
-        "id": page.id,
-        "url": page.url,
-        "title": page.title,
-        "content": page.content,
-        "content_hash": page.content_hash,
-        "scraped_at": page.scraped_at,
-        "last_seen_at": page.last_seen_at,
+        "id": page.id, "url": page.url, "title": page.title, "content": page.content,
+        "content_hash": page.content_hash, "scraped_at": page.scraped_at, "last_seen_at": page.last_seen_at,
     }
 
 
-# ── Schedule & Export Endpoints ───────────────────────────────────────────────
+# ── Scheduling ──────────────────────────────────────────────────────────────────
 
 class ScheduleRequest(BaseModel):
     url: str
-    interval_minutes: int = 60
-    enabled: bool = True
+    mode: str = "static"
+    minute: str = "*"
+    hour: str = "*"
+    day_of_week: str = "*"
+    day_of_month: str = "*"
+    month_of_year: str = "*"
+    feed_selector: str = "body"
+    item_selector: Optional[str] = None
+    detail_wait_selector: str = "h1"
+    max_scrolls: int = 10
+    max_items: int = 10
 
 
-class S3ExportRequest(BaseModel):
-    bucket_name: Optional[str] = None
-    s3_key: Optional[str] = None
+@app.post("/schedules", dependencies=[Depends(require_auth)])
+def create_schedule(body: ScheduleRequest, db: Session = Depends(get_db)):
+    if body.mode not in ("static", "playwright", "scroll", "click_through"):
+        raise HTTPException(status_code=400, detail="Invalid mode")
 
-
-@app.post("/schedule", dependencies=[Depends(require_auth)])
-def add_schedule(body: ScheduleRequest, db: Session = Depends(get_db)):
-    """Add or update a periodic scraping schedule for a URL."""
-    existing = db.query(PeriodicTarget).filter_by(url=body.url).first()
-    if existing:
-        existing.interval_minutes = body.interval_minutes
-        existing.enabled = body.enabled
-        db.commit()
-        db.refresh(existing)
-        return {"status": "updated", "target_id": existing.id}
-    
-    target = PeriodicTarget(url=body.url, interval_minutes=body.interval_minutes, enabled=body.enabled)
-    db.add(target)
+    schedule = ScheduledScrape(**body.model_dump())
+    db.add(schedule)
     db.commit()
-    db.refresh(target)
-    return {"status": "created", "target_id": target.id}
+    db.refresh(schedule)
+
+    upsert_beat_entry(schedule)  # registers with live RedBeat scheduler
+
+    return {"id": schedule.id, "status": "scheduled"}
 
 
-@app.get("/schedule", dependencies=[Depends(require_auth)])
-def list_schedule(db: Session = Depends(get_db)):
-    """List all scheduled periodic scraping targets."""
-    targets = db.query(PeriodicTarget).all()
+@app.get("/schedules", dependencies=[Depends(require_auth)])
+def list_schedules(db: Session = Depends(get_db)):
+    schedules = db.query(ScheduledScrape).all()
     return [
         {
-            "id": t.id,
-            "url": t.url,
-            "interval_minutes": t.interval_minutes,
-            "last_scraped_at": t.last_scraped_at,
-            "enabled": t.enabled,
+            "id": s.id, "url": s.url, "mode": s.mode,
+            "cron": f"{s.minute} {s.hour} {s.day_of_month} {s.month_of_year} {s.day_of_week}",
+            "enabled": s.enabled, "created_at": s.created_at, "last_triggered_at": s.last_triggered_at,
         }
-        for t in targets
+        for s in schedules
     ]
 
 
-@app.delete("/schedule/{target_id}", dependencies=[Depends(require_auth)])
-def delete_schedule(target_id: int, db: Session = Depends(get_db)):
-    """Remove a periodic scraping schedule."""
-    target = db.query(PeriodicTarget).filter_by(id=target_id).first()
-    if not target:
-        raise HTTPException(status_code=404, detail="Target not found")
-    db.delete(target)
+@app.patch("/schedules/{schedule_id}", dependencies=[Depends(require_auth)])
+def toggle_schedule(schedule_id: int, enabled: bool, db: Session = Depends(get_db)):
+    schedule = db.query(ScheduledScrape).filter_by(id=schedule_id).first()
+    if not schedule:
+        raise HTTPException(status_code=404, detail="Schedule not found")
+
+    schedule.enabled = enabled
     db.commit()
-    return {"status": "deleted"}
+
+    if enabled:
+        upsert_beat_entry(schedule)
+    else:
+        remove_beat_entry(schedule_id)  # disabling removes the live entry so it stops firing
+
+    return {"id": schedule_id, "enabled": enabled}
 
 
-@app.get("/export/csv", dependencies=[Depends(require_auth)])
-def export_csv(db: Session = Depends(get_db)):
-    """Stream all scraped done pages as a CSV file download."""
-    import io
-    import csv
-    pages = db.query(ScrapedPage).filter_by(status="done").all()
-    
-    def generate():
-        output = io.StringIO()
-        writer = csv.writer(output)
-        writer.writerow(["id", "url", "title", "scraped_at", "last_seen_at", "content"])
-        yield output.getvalue()
-        output.seek(0)
-        output.truncate(0)
-        
-        for p in pages:
-            writer.writerow([p.id, p.url, p.title, p.scraped_at, p.last_seen_at, p.content])
-            yield output.getvalue()
-            output.seek(0)
-            output.truncate(0)
+@app.delete("/schedules/{schedule_id}", dependencies=[Depends(require_auth)])
+def delete_schedule(schedule_id: int, db: Session = Depends(get_db)):
+    schedule = db.query(ScheduledScrape).filter_by(id=schedule_id).first()
+    if not schedule:
+        raise HTTPException(status_code=404, detail="Schedule not found")
 
-    headers = {
-        "Content-Disposition": 'attachment; filename="scraped_pages.csv"',
-        "Content-Type": "text/csv",
-    }
-    return StreamingResponse(generate(), headers=headers)
+    remove_beat_entry(schedule_id)
+    db.delete(schedule)
+    db.commit()
+    return {"id": schedule_id, "status": "deleted"}
+
+
+# ── Export ────────────────────────────────────────────────────────────────────
+
+@app.get("/export", dependencies=[Depends(require_auth)])
+def export_csv():
+    buffer = pages_to_csv()
+    filename = f"scraped_pages_{datetime.utcnow().strftime('%Y%m%dT%H%M%SZ')}.csv"
+    return StreamingResponse(
+        iter([buffer.getvalue()]),
+        media_type="text/csv",
+        headers={"Content-Disposition": f"attachment; filename={filename}"},
+    )
+
+
+class S3ExportRequest(BaseModel):
+    bucket: Optional[str] = None
+    key_prefix: str = "scraper-exports"
 
 
 @app.post("/export/s3", dependencies=[Depends(require_auth)])
-def trigger_s3_export(body: S3ExportRequest):
-    """Trigger a background task to export scraped pages to AWS S3 in CSV format."""
-    task = export_to_s3_task.delay(body.bucket_name, body.s3_key)
-    return {"status": "queued", "task_id": task.id}
+def export_to_s3(body: S3ExportRequest):
+    try:
+        result = upload_csv_to_s3(bucket=body.bucket, key_prefix=body.key_prefix)
+        return result
+    except (ValueError, RuntimeError) as e:
+        raise HTTPException(status_code=400, detail=str(e))
 
 
 @app.get("/health")

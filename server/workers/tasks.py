@@ -1,7 +1,7 @@
 import os
 from celery import Celery
-from datetime import datetime, timezone
-from models.db import SessionLocal, ScrapeJob
+from datetime import datetime
+from models.db import SessionLocal, ScrapeJob, ScheduledScrape
 
 REDIS_URL = os.getenv("REDIS_URL", "redis://localhost:6379/0")
 
@@ -17,55 +17,85 @@ app.conf.update(
     accept_content=["json"],
     timezone="UTC",
     task_track_started=True,
-    task_acks_late=True,                    # only ack after task completes
-    worker_prefetch_multiplier=1,           # one task at a time per worker
+    task_acks_late=True,
+    worker_prefetch_multiplier=1,
+    # RedBeat: Redis-backed dynamic schedule store. Entries can be added/removed
+    # at runtime (via scheduler/manager.py) without restarting the beat process —
+    # that's what makes this "dynamic" rather than a static celeryconfig schedule.
+    redbeat_redis_url=REDIS_URL,
+    beat_scheduler="redbeat.RedBeatScheduler",
+    redbeat_key_prefix="scraper:redbeat:",
 )
-
-app.conf.beat_schedule = {
-    "check-periodic-scrapes-every-minute": {
-        "task": "workers.tasks.check_periodic_scrapes",
-        "schedule": 60.0,
-    }
-}
 
 
 @app.task(bind=True, max_retries=3, default_retry_delay=10)
-def scrape_url(self, url: str, job_id: int = None, use_playwright: bool = False):
-    """
-    Main scrape task. Fetches a URL, parses it, and stores to DB.
-    Retries up to 3 times on failure with 10s delay.
-    """
-    from scraper.fetcher import fetch_page, fetch_page_static
+def scrape_url(
+    self,
+    url: str,
+    job_id: int = None,
+    mode: str = "static",
+    feed_selector: str = "body",
+    max_scrolls: int = 10,
+    item_selector: str = None,
+    detail_wait_selector: str = "h1",
+    max_items: int = 10,
+):
+    from scraper.fetcher import (
+        fetch_page,
+        fetch_page_static,
+        fetch_infinite_scroll,
+        fetch_with_click_through,
+    )
     from pipeline.store import save_page
 
     db = SessionLocal()
 
     try:
-        # Mark job as running
         if job_id:
             job = db.query(ScrapeJob).filter_by(id=job_id).first()
             if job:
                 job.status = "running"
                 db.commit()
 
-        # Fetch
-        if use_playwright:
+        saved_count = 0
+
+        if mode == "playwright":
             data = fetch_page(url)
+            page = save_page(data)
+            saved_count = 1 if page else 0
+
+        elif mode == "scroll":
+            data = fetch_infinite_scroll(url, feed_selector=feed_selector, max_scrolls=max_scrolls)
+            page = save_page(data)
+            saved_count = 1 if page else 0
+
+        elif mode == "click_through":
+            if not item_selector:
+                raise ValueError("item_selector is required for click_through mode")
+            results = fetch_with_click_through(
+                url,
+                item_selector=item_selector,
+                detail_wait_selector=detail_wait_selector,
+                max_items=max_items,
+            )
+            for data in results:
+                page = save_page(data)
+                if page:
+                    saved_count += 1
+
         else:
             data = fetch_page_static(url)
+            page = save_page(data)
+            saved_count = 1 if page else 0
 
-        # Store
-        page = save_page(data)
-
-        # Mark job done
         if job_id:
             job = db.query(ScrapeJob).filter_by(id=job_id).first()
             if job:
                 job.status = "done"
-                job.finished_at = datetime.now(timezone.utc)
+                job.finished_at = datetime.utcnow()
                 db.commit()
 
-        return {"status": "ok", "url": url, "duplicate": page is None}
+        return {"status": "ok", "url": url, "mode": mode, "saved": saved_count}
 
     except Exception as exc:
         if job_id:
@@ -73,7 +103,7 @@ def scrape_url(self, url: str, job_id: int = None, use_playwright: bool = False)
             if job:
                 job.status = "failed"
                 job.error = str(exc)
-                job.finished_at = datetime.now(timezone.utc)
+                job.finished_at = datetime.utcnow()
                 db.commit()
 
         raise self.retry(exc=exc)
@@ -83,88 +113,36 @@ def scrape_url(self, url: str, job_id: int = None, use_playwright: bool = False)
 
 
 @app.task
-def check_periodic_scrapes():
+def run_scheduled_scrape(schedule_id: int):
     """
-    Periodic task triggered by Celery Beat to check if any enabled targets
-    are due for a fresh scrape based on their configured interval.
+    Fired by RedBeat on the configured cron. Creates a fresh ScrapeJob row
+    (so it shows up in the normal job history/UI) then delegates to scrape_url,
+    and stamps last_triggered_at on the schedule.
     """
-    from models.db import PeriodicTarget, ScrapeJob
     db = SessionLocal()
     try:
-        now = datetime.now(timezone.utc)
-        targets = db.query(PeriodicTarget).filter_by(enabled=True).all()
-        for target in targets:
-            should_scrape = False
-            if not target.last_scraped_at:
-                should_scrape = True
-            else:
-                elapsed = now - target.last_scraped_at.replace(tzinfo=timezone.utc)
-                if elapsed.total_seconds() >= target.interval_minutes * 60:
-                    should_scrape = True
+        schedule = db.query(ScheduledScrape).filter_by(id=schedule_id).first()
+        if not schedule or not schedule.enabled:
+            return {"status": "skipped", "reason": "schedule missing or disabled"}
 
-            if should_scrape:
-                job = ScrapeJob(url=target.url, status="queued")
-                db.add(job)
-                db.commit()
-                db.refresh(job)
+        job = ScrapeJob(url=schedule.url, status="queued")
+        db.add(job)
+        db.commit()
+        db.refresh(job)
 
-                task = scrape_url.delay(target.url, job_id=job.id)
-                job.celery_task_id = task.id
-                target.last_scraped_at = now
-                db.commit()
-    except Exception as e:
-        print(f"[scheduler] Error running periodic check: {e}")
+        schedule.last_triggered_at = datetime.utcnow()
+        db.commit()
+
+        scrape_url.delay(
+            schedule.url,
+            job_id=job.id,
+            mode=schedule.mode,
+            feed_selector=schedule.feed_selector,
+            max_scrolls=schedule.max_scrolls,
+            item_selector=schedule.item_selector,
+            detail_wait_selector=schedule.detail_wait_selector,
+            max_items=schedule.max_items,
+        )
+        return {"status": "ok", "schedule_id": schedule_id, "job_id": job.id}
     finally:
         db.close()
-
-
-@app.task
-def export_to_s3_task(bucket_name: str = None, s3_key: str = None):
-    """
-    Task to generate a CSV export of all scraped pages and upload it to AWS S3.
-    """
-    import io
-    import csv
-    import boto3
-    from models.db import ScrapedPage
-
-    db = SessionLocal()
-    try:
-        pages = db.query(ScrapedPage).filter_by(status="done").all()
-        
-        csv_buffer = io.StringIO()
-        writer = csv.writer(csv_buffer)
-        writer.writerow(["id", "url", "title", "scraped_at", "last_seen_at", "content"])
-        for p in pages:
-            writer.writerow([p.id, p.url, p.title, p.scraped_at, p.last_seen_at, p.content])
-        
-        csv_data = csv_buffer.getvalue()
-        
-        bucket = bucket_name or os.getenv("AWS_S3_BUCKET")
-        if not bucket:
-            raise ValueError("No S3 bucket specified or configured via AWS_S3_BUCKET env variable.")
-            
-        key = s3_key or f"exports/scraped_pages_{datetime.now(timezone.utc).strftime('%Y%m%d_%H%M%S')}.csv"
-        
-        s3 = boto3.client(
-            "s3",
-            aws_access_key_id=os.getenv("AWS_ACCESS_KEY_ID"),
-            aws_secret_access_key=os.getenv("AWS_SECRET_ACCESS_KEY"),
-            region_name=os.getenv("AWS_DEFAULT_REGION", "us-east-1"),
-        )
-        
-        s3.put_object(
-            Bucket=bucket,
-            Key=key,
-            Body=csv_data.encode("utf-8"),
-            ContentType="text/csv",
-        )
-        
-        return {"status": "ok", "bucket": bucket, "key": key, "rows_exported": len(pages)}
-        
-    except Exception as e:
-        print(f"[exporter] S3 Export failed: {e}")
-        raise e
-    finally:
-        db.close()
-

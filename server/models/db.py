@@ -1,4 +1,4 @@
-from datetime import datetime, timezone
+from datetime import datetime
 from sqlalchemy import Column, Integer, String, Text, DateTime, Boolean, create_engine
 from sqlalchemy.orm import DeclarativeBase, sessionmaker
 import os
@@ -7,10 +7,6 @@ DATABASE_URL = os.getenv("DATABASE_URL", "postgresql://scraper:scraper@localhost
 
 engine = create_engine(DATABASE_URL)
 SessionLocal = sessionmaker(bind=engine)
-
-
-def get_utc_now():
-    return datetime.now(timezone.utc)
 
 
 class Base(DeclarativeBase):
@@ -24,10 +20,10 @@ class ScrapedPage(Base):
     url = Column(String, unique=True, nullable=False)
     title = Column(String)
     content = Column(Text)
-    content_hash = Column(String(64), index=True)   # for deduplication
-    status = Column(String, default="pending")       # pending | done | failed
-    scraped_at = Column(DateTime, default=get_utc_now)
-    last_seen_at = Column(DateTime, default=get_utc_now)
+    content_hash = Column(String(64), index=True)
+    status = Column(String, default="pending")
+    scraped_at = Column(DateTime, default=datetime.utcnow)
+    last_seen_at = Column(DateTime, default=datetime.utcnow)
 
 
 class ScrapeJob(Base):
@@ -36,25 +32,45 @@ class ScrapeJob(Base):
     id = Column(Integer, primary_key=True, index=True)
     celery_task_id = Column(String, unique=True)
     url = Column(String, nullable=False)
-    status = Column(String, default="queued")        # queued | running | done | failed
-    created_at = Column(DateTime, default=get_utc_now)
+    status = Column(String, default="queued")
+    created_at = Column(DateTime, default=datetime.utcnow)
     finished_at = Column(DateTime, nullable=True)
     error = Column(Text, nullable=True)
 
 
-class PeriodicTarget(Base):
-    __tablename__ = "periodic_targets"
+class ScheduledScrape(Base):
+    """
+    A recurring scrape job. Mirrors a RedBeat entry (same id used as the
+    RedBeat entry name: 'schedule:{id}') so the DB row and the live Beat
+    schedule stay in sync — DB is the source of truth for display,
+    RedBeat is the source of truth for actually firing.
+    """
+    __tablename__ = "scheduled_scrapes"
 
     id = Column(Integer, primary_key=True, index=True)
-    url = Column(String, unique=True, nullable=False)
-    interval_minutes = Column(Integer, default=60)
-    last_scraped_at = Column(DateTime, nullable=True)
+    url = Column(String, nullable=False)
+    mode = Column(String, default="static")
+
+    # cron fields, celery.schedules.crontab syntax (e.g. "*/15" for every 15 min)
+    minute = Column(String, default="*")
+    hour = Column(String, default="*")
+    day_of_week = Column(String, default="*")
+    day_of_month = Column(String, default="*")
+    month_of_year = Column(String, default="*")
+
+    feed_selector = Column(String, default="body")
+    item_selector = Column(String, nullable=True)
+    detail_wait_selector = Column(String, default="h1")
+    max_scrolls = Column(Integer, default=10)
+    max_items = Column(Integer, default=10)
+
     enabled = Column(Boolean, default=True)
+    created_at = Column(DateTime, default=datetime.utcnow)
+    last_triggered_at = Column(DateTime, nullable=True)
 
 
 def init_db():
     Base.metadata.create_all(bind=engine)
-
 
 
 def get_db():
