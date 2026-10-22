@@ -7,3 +7,4 @@ overrides:
   nanoid: ">=6.0.1"
   js-yaml: ">=5.2.3"
   shell-quote: ">=1.11.0"
+  follow-redirects: ">=1.16.1"
